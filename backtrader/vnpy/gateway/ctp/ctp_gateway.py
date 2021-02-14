@@ -6,7 +6,7 @@ import pytz
 from datetime import datetime
 from time import sleep
 
-from vnpy.api.ctp import (
+from backtrader.vnpy.api.ctp import (
     MdApi,
     TdApi,
     THOST_FTDC_OAS_Submitted,
@@ -41,7 +41,7 @@ from vnpy.api.ctp import (
     THOST_FTDC_VC_CV,
     THOST_FTDC_AF_Delete
 )
-from vnpy.trader.constant import (
+from backtrader.vnpy.trader.constant import (
     Direction,
     Offset,
     Exchange,
@@ -50,8 +50,8 @@ from vnpy.trader.constant import (
     Status,
     OptionType
 )
-from vnpy.trader.gateway import BaseGateway
-from vnpy.trader.object import (
+from backtrader.vnpy.trader.gateway import BaseGateway
+from backtrader.vnpy.trader.object import (
     TickData,
     OrderData,
     TradeData,
@@ -62,8 +62,8 @@ from vnpy.trader.object import (
     CancelRequest,
     SubscribeRequest,
 )
-from vnpy.trader.utility import get_folder_path
-from vnpy.trader.event import EVENT_TIMER
+from backtrader.vnpy.trader.utility import get_folder_path
+from backtrader.vnpy.trader.event import EVENT_TIMER
 
 
 STATUS_CTP2VT = {

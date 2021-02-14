@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Sequence, Dict, List, Optional, Callable
 from copy import copy
 
-from vnpy.event import Event, EventEngine
+from backtrader.vnpy.event import Event, EventEngine
 from .event import (
     EVENT_TICK,
     EVENT_ORDER,
