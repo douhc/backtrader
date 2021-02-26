@@ -69,3 +69,6 @@ samples2/
 datas/*.py
 
 .idea/
+
+.ccls-cache/
+.vscode/

@@ -6,7 +6,7 @@ import pytz
 from datetime import datetime
 from time import sleep
 
-from backtrader.vnpy.api.ctp import (
+from backtrader.ctp.api.ctp import (
     MdApi,
     TdApi,
     THOST_FTDC_OAS_Submitted,
@@ -41,29 +41,6 @@ from backtrader.vnpy.api.ctp import (
     THOST_FTDC_VC_CV,
     THOST_FTDC_AF_Delete
 )
-from backtrader.vnpy.trader.constant import (
-    Direction,
-    Offset,
-    Exchange,
-    OrderType,
-    Product,
-    Status,
-    OptionType
-)
-from backtrader.vnpy.trader.gateway import BaseGateway
-from backtrader.vnpy.trader.object import (
-    TickData,
-    OrderData,
-    TradeData,
-    PositionData,
-    AccountData,
-    ContractData,
-    OrderRequest,
-    CancelRequest,
-    SubscribeRequest,
-)
-from backtrader.vnpy.trader.utility import get_folder_path
-from backtrader.vnpy.trader.event import EVENT_TIMER
 
 
 STATUS_CTP2VT = {
@@ -117,134 +94,34 @@ OPTIONTYPE_CTP2VT = {
     THOST_FTDC_CP_CallOptions: OptionType.CALL,
     THOST_FTDC_CP_PutOptions: OptionType.PUT
 }
-
 MAX_FLOAT = sys.float_info.max
 CHINA_TZ = pytz.timezone("Asia/Shanghai")
-
 
 symbol_exchange_map = {}
 symbol_name_map = {}
 symbol_size_map = {}
 
+import logging
+from .ctpstore import CtpStore
+from .object import *
+from .constant import *
 
-class CtpGateway(BaseGateway):
-    """
-    VN Trader Gateway for CTP .
-    """
+CTP_MD_PATH = "/tmp/ctp/md"
+CTP_TD_PATH = "/tmp/ctp/td"
 
-    default_setting = {
-        "用户名": "",
-        "密码": "",
-        "经纪商代码": "",
-        "交易服务器": "",
-        "行情服务器": "",
-        "产品名称": "",
-        "授权编码": "",
-        "产品信息": ""
-    }
 
-    exchanges = list(EXCHANGE_CTP2VT.values())
-
-    def __init__(self, event_engine):
-        """Constructor"""
-        super().__init__(event_engine, "CTP")
-
-        self.td_api = CtpTdApi(self)
-        self.md_api = CtpMdApi(self)
-
-    def connect(self, setting: dict):
-        """"""
-        userid = setting["用户名"]
-        password = setting["密码"]
-        brokerid = setting["经纪商代码"]
-        td_address = setting["交易服务器"]
-        md_address = setting["行情服务器"]
-        appid = setting["产品名称"]
-        auth_code = setting["授权编码"]
-        product_info = setting["产品信息"]
-
-        if (
-            (not td_address.startswith("tcp://"))
-            and (not td_address.startswith("ssl://"))
-        ):
-            td_address = "tcp://" + td_address
-
-        if (
-            (not md_address.startswith("tcp://"))
-            and (not md_address.startswith("ssl://"))
-        ):
-            md_address = "tcp://" + md_address
-
-        self.td_api.connect(td_address, userid, password, brokerid, auth_code, appid, product_info)
-        self.md_api.connect(md_address, userid, password, brokerid)
-
-        self.init_query()
-
-    def subscribe(self, req: SubscribeRequest):
-        """"""
-        self.md_api.subscribe(req)
-
-    def send_order(self, req: OrderRequest):
-        """"""
-        if req.type == OrderType.RFQ:
-            vt_orderid = self.td_api.send_rfq(req)
-        else:
-            vt_orderid = self.td_api.send_order(req)
-        return vt_orderid
-
-    def cancel_order(self, req: CancelRequest):
-        """"""
-        self.td_api.cancel_order(req)
-
-    def query_account(self):
-        """"""
-        self.td_api.query_account()
-
-    def query_position(self):
-        """"""
-        self.td_api.query_position()
-
-    def close(self):
-        """"""
-        self.td_api.close()
-        self.md_api.close()
-
-    def write_error(self, msg: str, error: dict):
-        """"""
-        error_id = error["ErrorID"]
-        error_msg = error["ErrorMsg"]
-        msg = f"{msg}，代码：{error_id}，信息：{error_msg}"
-        self.write_log(msg)
-
-    def process_timer_event(self, event):
-        """"""
-        self.count += 1
-        if self.count < 2:
-            return
-        self.count = 0
-
-        func = self.query_functions.pop(0)
-        func()
-        self.query_functions.append(func)
-
-        self.md_api.update_date()
-
-    def init_query(self):
-        """"""
-        self.count = 0
-        self.query_functions = [self.query_account, self.query_position]
-        self.event_engine.register(EVENT_TIMER, self.process_timer_event)
+logging.basicConfig(level = logging.INFO, format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 
 class CtpMdApi(MdApi):
     """"""
 
-    def __init__(self, gateway):
+    def __init__(self, gateway: CtpStore):
         """Constructor"""
         super(CtpMdApi, self).__init__()
-
+        self.gateway_name = "CTP"
         self.gateway = gateway
-        self.gateway_name = gateway.gateway_name
+        self.logger = logging.getLogger("MD")
 
         self.reqid = 0
 
@@ -262,7 +139,7 @@ class CtpMdApi(MdApi):
         """
         Callback when front server is connected.
         """
-        self.gateway.write_log("行情服务器连接成功")
+        self.logger.info("行情服务器连接成功")
         self.login()
 
     def onFrontDisconnected(self, reason: int):
@@ -270,7 +147,7 @@ class CtpMdApi(MdApi):
         Callback when front server is disconnected.
         """
         self.login_status = False
-        self.gateway.write_log(f"行情服务器连接断开，原因{reason}")
+        self.logger.info(f"行情服务器连接断开，原因{reason}")
 
     def onRspUserLogin(self, data: dict, error: dict, reqid: int, last: bool):
         """
@@ -278,25 +155,25 @@ class CtpMdApi(MdApi):
         """
         if not error["ErrorID"]:
             self.login_status = True
-            self.gateway.write_log("行情服务器登录成功")
+            self.logger.info("行情服务器登录成功")
 
             for symbol in self.subscribed:
                 self.subscribeMarketData(symbol)
         else:
-            self.gateway.write_error("行情服务器登录失败", error)
+            self.logger.error("行情服务器登录失败", error)
 
     def onRspError(self, error: dict, reqid: int, last: bool):
         """
         Callback when error occured.
         """
-        self.gateway.write_error("行情接口报错", error)
+        self.logger.error("行情接口报错", error)
 
     def onRspSubMarketData(self, data: dict, error: dict, reqid: int, last: bool):
         """"""
         if not error or not error["ErrorID"]:
             return
 
-        self.gateway.write_error("行情订阅失败", error)
+        self.logger.error("行情订阅失败", error)
 
     def onRtnDepthMarketData(self, data: dict):
         """
@@ -369,8 +246,8 @@ class CtpMdApi(MdApi):
 
         # If not connected, then start connection first.
         if not self.connect_status:
-            path = get_folder_path(self.gateway_name.lower())
-            self.createFtdcMdApi((str(path) + "\\Md").encode("GBK"))
+            path = CTP_MD_PATH
+            self.createFtdcMdApi(str(path).encode("GBK"))
 
             self.registerFront(address)
             self.init()
@@ -416,12 +293,13 @@ class CtpMdApi(MdApi):
 class CtpTdApi(TdApi):
     """"""
 
-    def __init__(self, gateway):
+    def __init__(self, gateway: CtpStore):
         """Constructor"""
         super(CtpTdApi, self).__init__()
+        self.gateway_name = "CTP"
 
         self.gateway = gateway
-        self.gateway_name = gateway.gateway_name
+        self.logger = logging.getLogger("TD")
 
         self.reqid = 0
         self.order_ref = 0
@@ -449,7 +327,7 @@ class CtpTdApi(TdApi):
 
     def onFrontConnected(self):
         """"""
-        self.gateway.write_log("交易服务器连接成功")
+        self.logger.info("交易服务器连接成功")
 
         if self.auth_code:
             self.authenticate()
@@ -459,16 +337,16 @@ class CtpTdApi(TdApi):
     def onFrontDisconnected(self, reason: int):
         """"""
         self.login_status = False
-        self.gateway.write_log(f"交易服务器连接断开，原因{reason}")
+        self.logger.info(f"交易服务器连接断开，原因{reason}")
 
     def onRspAuthenticate(self, data: dict, error: dict, reqid: int, last: bool):
         """"""
         if not error['ErrorID']:
             self.auth_status = True
-            self.gateway.write_log("交易服务器授权验证成功")
+            self.logger.info("交易服务器授权验证成功")
             self.login()
         else:
-            self.gateway.write_error("交易服务器授权验证失败", error)
+            self.logger.error("交易服务器授权验证失败", error)
 
     def onRspUserLogin(self, data: dict, error: dict, reqid: int, last: bool):
         """"""
@@ -476,7 +354,7 @@ class CtpTdApi(TdApi):
             self.frontid = data["FrontID"]
             self.sessionid = data["SessionID"]
             self.login_status = True
-            self.gateway.write_log("交易服务器登录成功")
+            self.logger.info("交易服务器登录成功")
 
             # Confirm settlement
             req = {
@@ -488,7 +366,7 @@ class CtpTdApi(TdApi):
         else:
             self.login_failed = True
 
-            self.gateway.write_error("交易服务器登录失败", error)
+            self.logger.error("交易服务器登录失败", error)
 
     def onRspOrderInsert(self, data: dict, error: dict, reqid: int, last: bool):
         """"""
@@ -511,11 +389,11 @@ class CtpTdApi(TdApi):
         )
         self.gateway.on_order(order)
 
-        self.gateway.write_error("交易委托失败", error)
+        self.logger.error("交易委托失败", error)
 
     def onRspOrderAction(self, data: dict, error: dict, reqid: int, last: bool):
         """"""
-        self.gateway.write_error("交易撤单失败", error)
+        self.logger.error("交易撤单失败", error)
 
     def onRspQueryMaxOrderVolume(self, data: dict, error: dict, reqid: int, last: bool):
         """"""
@@ -525,7 +403,7 @@ class CtpTdApi(TdApi):
         """
         Callback of settlment info confimation.
         """
-        self.gateway.write_log("结算信息确认成功")
+        self.logger.info("结算信息确认成功")
 
         while True:
             self.reqid += 1
@@ -643,7 +521,7 @@ class CtpTdApi(TdApi):
 
         if last:
             self.contract_inited = True
-            self.gateway.write_log("合约信息查询成功")
+            self.logger.info("合约信息查询成功")
 
             for data in self.order_data:
                 self.onRtnOrder(data)
@@ -727,9 +605,9 @@ class CtpTdApi(TdApi):
         if not error["ErrorID"]:
             symbol = data["InstrumentID"]
             msg = f"{symbol}询价请求发送成功"
-            self.gateway.write_log(msg)
+            self.logger.info(msg)
         else:
-            self.gateway.write_error("询价请求发送失败", error)
+            self.logger.error("询价请求发送失败", error)
 
     def connect(
         self,
@@ -752,8 +630,7 @@ class CtpTdApi(TdApi):
         self.product_info = product_info
 
         if not self.connect_status:
-            path = get_folder_path(self.gateway_name.lower())
-            self.createFtdcTraderApi((str(path) + "\\Td").encode("GBK"))
+            self.createFtdcTraderApi((CTP_TD_PATH).encode("GBK"))
 
             self.subscribePrivateTopic(0)
             self.subscribePublicTopic(0)
@@ -807,11 +684,11 @@ class CtpTdApi(TdApi):
         Send new order.
         """
         if req.offset not in OFFSET_VT2CTP:
-            self.gateway.write_log("请选择开平方向")
+            self.logger.info("请选择开平方向")
             return ""
 
         if req.type not in ORDERTYPE_VT2CTP:
-            self.gateway.write_log(f"当前接口不支持该类型的委托{req.type.value}")
+            self.logger.info(f"当前接口不支持该类型的委托{req.type.value}")
             return ""
 
         self.order_ref += 1
