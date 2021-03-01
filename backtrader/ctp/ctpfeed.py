@@ -208,6 +208,7 @@ class CtpData(with_metaclass(MetaCtpData, DataBase)):
             if self.fromdate > float('-inf'):
                 dtbegin = num2date(self.fromdate)
 
+            # TODO
             self.qhist = self.o.candles(
                 self.p.dataname, dtbegin, dtend,
                 self._timeframe, self._compression,
@@ -217,7 +218,7 @@ class CtpData(with_metaclass(MetaCtpData, DataBase)):
             self._state = self._ST_HISTORBACK
             return True
 
-        self.qlive = self.o.streaming_prices(self.p.dataname, tmout=tmout)
+        self.qlive = self.o.qtick
         if instart:
             self._statelivereconn = self.p.backfill_start
         else:
@@ -261,25 +262,6 @@ class CtpData(with_metaclass(MetaCtpData, DataBase)):
                         self._state = self._ST_OVER
                         return False  # failed
 
-                    self._reconns -= 1
-                    self._st_start(instart=False, tmout=self.p.reconntimeout)
-                    continue
-
-                if 'code' in msg:
-                    self.put_notification(self.CONNBROKEN)
-                    code = msg['code']
-                    if code not in [599, 598, 596]:
-                        self.put_notification(self.DISCONNECTED)
-                        self._state = self._ST_OVER
-                        return False  # failed
-
-                    if not self.p.reconnect or self._reconns == 0:
-                        # Can no longer reconnect
-                        self.put_notification(self.DISCONNECTED)
-                        self._state = self._ST_OVER
-                        return False  # failed
-
-                    # Can reconnect
                     self._reconns -= 1
                     self._st_start(instart=False, tmout=self.p.reconntimeout)
                     continue
@@ -398,4 +380,5 @@ class CtpData(with_metaclass(MetaCtpData, DataBase)):
         return True
 
     def _load_history(self, msg):
+        # TODO
         return True

@@ -94,7 +94,7 @@ class CtpBroker(with_metaclass(MetaCtpBroker, BrokerBase)):
         pos = self.getposition(data)
 
         if pos.size < 0:
-            order = SellOrder(data=data,
+            # order = SellOrder(data=data,
                               size=pos.size, price=pos.price,
                               exectype=Order.Market,
                               simulated=True)

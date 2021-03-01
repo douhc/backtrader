@@ -13,6 +13,7 @@ import backtrader as bt
 from backtrader.metabase import MetaParams
 from backtrader.utils.py3 import queue, with_metaclass
 from backtrader.utils import AutoDict
+from backtrader.order import Order
 
 from backtrader.ctp.ctp_gateway import CtpTdApi, CtpMdApi
 from .object import *
@@ -127,8 +128,6 @@ class CtpStore(with_metaclass(MetaSingleton, object)):
 
         elif broker is not None:
             self.broker = broker
-            self.streaming_events()
-            self.broker_threads()
 
     def stop(self):
         # signal end of thread
@@ -187,14 +186,22 @@ class CtpStore(with_metaclass(MetaSingleton, object)):
         self._contracts[contract.symbol] = contract
 
     def on_order(self, order: OrderData):
-        pass
+        oref = self._ordersrev[order.vt_orderid]
+        if order.status == Status.REJECTED:
+            self.broker._reject(oref)
+        elif order.status == Status.SUBMITTING:
+            self.broker._submit(oref)
+        elif order.status == Status.CANCELLED:
+            self.broker._cancel(oref)
+        else:
+            print(f"order status {order.status}")
 
     def on_trade(self, trade: TradeData):
-        pass
+        oref = self._ordersrev[trade.vt_orderid]        
+        self.broker._fill(oref, trade.volume, trade.price)
 
     def get_positions(self):
         # 字段结构， key: ("ag2103", "多"), value: PositionData()
-        # TODO
         return self._positions
 
     def get_granularity(self, timeframe, compression):
@@ -209,11 +216,15 @@ class CtpStore(with_metaclass(MetaSingleton, object)):
     def get_value(self):
         return self._value
 
+    def candles(self, dataname, dtbegin, dtend, timeframe, compression,
+                candleFormat, includeFirst):
+        return queue.Queue()
+
     _ORDEREXECS = {
-        bt.Order.Market: 'market',
-        bt.Order.Limit: 'limit',
-        bt.Order.Stop: 'stop',
-        bt.Order.StopLimit: 'stop',
+        bt.Order.Market: OrderType.MARKET,
+        bt.Order.Limit: OrderType.LIMIT,
+        bt.Order.Stop: OrderType.STOP,
+        bt.Order.StopLimit: OrderType.STOP
     }
 
     def broker_threads(self):
@@ -259,38 +270,17 @@ class CtpStore(with_metaclass(MetaSingleton, object)):
 
             self._evt_acct.set()
 
-    def order_create(self, order, stopside=None, takeside=None, **kwargs):
-        okwargs = dict()
-        okwargs['instrument'] = order.data._dataname
-        okwargs['units'] = abs(order.created.size)
-        okwargs['side'] = 'buy' if order.isbuy() else 'sell'
-        okwargs['type'] = self._ORDEREXECS[order.exectype]
-        if order.exectype != bt.Order.Market:
-            okwargs['price'] = order.created.price
-            if order.valid is None:
-                # 1 year and datetime.max fail ... 1 month works
-                valid = datetime.utcnow() + timedelta(days=30)
-            else:
-                valid = order.data.num2date(order.valid)
-                # To timestamp with seconds precision
-            okwargs['expiry'] = int((valid - self._DTEPOCH).total_seconds())
-
-        if order.exectype == bt.Order.StopLimit:
-            okwargs['lowerBound'] = order.created.pricelimit
-            okwargs['upperBound'] = order.created.pricelimit
-
-        if order.exectype == bt.Order.StopTrail:
-            okwargs['trailingStop'] = order.trailamount
-
-        if stopside is not None:
-            okwargs['stopLoss'] = stopside.price
-
-        if takeside is not None:
-            okwargs['takeProfit'] = takeside.price
-
-        okwargs.update(**kwargs)  # anything from the user
-
-        self.q_ordercreate.put((order.ref, okwargs,))
+    def order_create(self, order: Order, stopside=None, takeside=None, **kwargs):
+        req = OrderRequest(
+            symbol=order.data._dataname,
+            direction= Direction.LONG if order.isbuy() else Direction.SHORT,
+            exchange=Exchange.SHFE,
+            type=self._ORDEREXECS[order.exectype],
+            volume=abs(order.created.size),
+            price=order.created.price,
+        )
+        oid = self.tdapi.send_order(req)
+        self._ordersrev[oid] = order
         return order
 
     _OIDSINGLE = ['orderOpened', 'tradeOpened', 'tradeReduced']
