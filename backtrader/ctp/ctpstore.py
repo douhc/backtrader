@@ -2,6 +2,7 @@
 # -*- coding: utf-8; py-indent-offset:4 -*-
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
+from backtrader.ctp.ctpbroker import CtpBroker
 
 import collections
 from datetime import datetime, timedelta
@@ -86,12 +87,11 @@ class CtpStore(with_metaclass(MetaSingleton, object)):
         self.notifs = collections.deque()  # store notifications for cerebro
 
         self._env = None  # reference to cerebro for general notifications
-        self.broker = None  # broker instance
+        self.broker: CtpBroker = None  # broker instance
         self.datas = list()  # datas that have registered over start
 
-        self._orders = collections.OrderedDict()  # map order.ref to oid
+        # self._orders = collections.OrderedDict()  # map order.ref to oid
         self._ordersrev = collections.OrderedDict()  # map oid to order.ref
-        self._transpend = collections.defaultdict(collections.deque)
 
         self._oenv = self._ENVPRACTICE if self.p.practice else self._ENVLIVE
 
@@ -130,11 +130,7 @@ class CtpStore(with_metaclass(MetaSingleton, object)):
             self.broker = broker
 
     def stop(self):
-        # signal end of thread
-        if self.broker is not None:
-            self.q_ordercreate.put(None)
-            self.q_orderclose.put(None)
-            self.q_account.put(None)
+        pass
 
     def put_notification(self, msg, *args, **kwargs):
         self.notifs.append((msg, args, kwargs))
@@ -193,6 +189,14 @@ class CtpStore(with_metaclass(MetaSingleton, object)):
             self.broker._submit(oref)
         elif order.status == Status.CANCELLED:
             self.broker._cancel(oref)
+        elif order.status == Status.PARTTRADED:
+            # TODO
+            # self.broker._fill(oref, order.traded, order.price)
+            pass
+        elif order.status == Status.ALLTRADED:
+            # TODO
+            # self.broker._fill(oref, order.traded, order.price)
+            pass
         else:
             print(f"order status {order.status}")
 
@@ -218,6 +222,7 @@ class CtpStore(with_metaclass(MetaSingleton, object)):
 
     def candles(self, dataname, dtbegin, dtend, timeframe, compression,
                 candleFormat, includeFirst):
+        # TODO
         return queue.Queue()
 
     _ORDEREXECS = {
@@ -226,49 +231,6 @@ class CtpStore(with_metaclass(MetaSingleton, object)):
         bt.Order.Stop: OrderType.STOP,
         bt.Order.StopLimit: OrderType.STOP
     }
-
-    def broker_threads(self):
-        self.q_account = queue.Queue()
-        self.q_account.put(True)  # force an immediate update
-        t = threading.Thread(target=self._t_account)
-        t.daemon = True
-        t.start()
-
-        self.q_ordercreate = queue.Queue()
-        t = threading.Thread(target=self._t_order_create)
-        t.daemon = True
-        t.start()
-
-        self.q_orderclose = queue.Queue()
-        t = threading.Thread(target=self._t_order_cancel)
-        t.daemon = True
-        t.start()
-
-        # Wait once for the values to be set
-        self._evt_acct.wait(self.p.account_tmout)
-
-    def _t_account(self):
-        while True:
-            try:
-                msg = self.q_account.get(timeout=self.p.account_tmout)
-                if msg is None:
-                    break  # end of thread
-            except queue.Empty:  # tmout -> time to refresh
-                pass
-
-            try:
-                accinfo = self.oapi.get_account(self.p.account)
-            except Exception as e:
-                self.put_notification(e)
-                continue
-
-            try:
-                self._cash = accinfo['marginAvail']
-                self._value = accinfo['balance']
-            except KeyError:
-                pass
-
-            self._evt_acct.set()
 
     def order_create(self, order: Order, stopside=None, takeside=None, **kwargs):
         req = OrderRequest(
@@ -280,167 +242,18 @@ class CtpStore(with_metaclass(MetaSingleton, object)):
             price=order.created.price,
         )
         oid = self.tdapi.send_order(req)
+        order.addinfo(orderid=oid)
         self._ordersrev[oid] = order
         return order
 
-    _OIDSINGLE = ['orderOpened', 'tradeOpened', 'tradeReduced']
-    _OIDMULTIPLE = ['tradesClosed']
-
-    def _t_order_create(self):
-        while True:
-            msg = self.q_ordercreate.get()
-            if msg is None:
-                break
-
-            oref, okwargs = msg
-            try:
-                o = self.oapi.create_order(self.p.account, **okwargs)
-            except Exception as e:
-                self.put_notification(e)
-                self.broker._reject(oref)
-                return
-
-            # Ids are delivered in different fields and all must be fetched to
-            # match them (as executions) to the order generated here
-            oids = list()
-            for oidfield in self._OIDSINGLE:
-                if oidfield in o and 'id' in o[oidfield]:
-                    oids.append(o[oidfield]['id'])
-
-            for oidfield in self._OIDMULTIPLE:
-                if oidfield in o:
-                    for suboidfield in o[oidfield]:
-                        oids.append(suboidfield['id'])
-
-            if not oids:
-                self.broker._reject(oref)
-                return
-
-            self._orders[oref] = oids[0]
-            self.broker._submit(oref)
-            if okwargs['type'] == 'market':
-                self.broker._accept(oref)  # taken immediately
-
-            for oid in oids:
-                self._ordersrev[oid] = oref  # maps ids to backtrader order
-
-                # An transaction may have happened and was stored
-                tpending = self._transpend[oid]
-                tpending.append(None)  # eom marker
-                while True:
-                    trans = tpending.popleft()
-                    if trans is None:
-                        break
-                    self._process_transaction(oid, trans)
-
-    def order_cancel(self, order):
-        self.q_orderclose.put(order.ref)
+    def order_cancel(self, order: Order):
+        oid = order.info["orderid"]
+        oid = oid[(len(self.mdapi.gateway_name)+1):]
+        req = CancelRequest(
+            orderid=oid,
+            symbol=order.data._dataname,
+            exchange=Exchange.SHFE,
+        )
+        self.tdapi.cancel_order(req)
         return order
 
-    def _t_order_cancel(self):
-        while True:
-            oref = self.q_orderclose.get()
-            if oref is None:
-                break
-
-            oid = self._orders.get(oref, None)
-            if oid is None:
-                continue  # the order is no longer there
-            try:
-                o = self.oapi.close_order(self.p.account, oid)
-            except Exception as e:
-                continue  # not cancelled - FIXME: notify
-
-            self.broker._cancel(oref)
-
-    _X_ORDER_CREATE = ('STOP_ORDER_CREATE',
-                       'LIMIT_ORDER_CREATE', 'MARKET_IF_TOUCHED_ORDER_CREATE',)
-
-    def _transaction(self, trans):
-        # Invoked from Streaming Events. May actually receive an event for an
-        # oid which has not yet been returned after creating an order. Hence
-        # store if not yet seen, else forward to processer
-        ttype = trans['type']
-        if ttype == 'MARKET_ORDER_CREATE':
-            try:
-                oid = trans['tradeReduced']['id']
-            except KeyError:
-                try:
-                    oid = trans['tradeOpened']['id']
-                except KeyError:
-                    return  # cannot do anything else
-
-        elif ttype in self._X_ORDER_CREATE:
-            oid = trans['id']
-        elif ttype == 'ORDER_FILLED':
-            oid = trans['orderId']
-
-        elif ttype == 'ORDER_CANCEL':
-            oid = trans['orderId']
-
-        elif ttype == 'TRADE_CLOSE':
-            oid = trans['id']
-            pid = trans['tradeId']
-            if pid in self._orders and False:  # Know nothing about trade
-                return  # can do nothing
-
-            # Skip above - at the moment do nothing
-            # Received directly from an event in the WebGUI for example which
-            # closes an existing position related to order with id -> pid
-            # COULD BE DONE: Generate a fake counter order to gracefully
-            # close the existing position
-            msg = ('Received TRADE_CLOSE for unknown order, possibly generated'
-                   ' over a different client or GUI')
-            self.put_notification(msg, trans)
-            return
-
-        else:  # Go aways gracefully
-            try:
-                oid = trans['id']
-            except KeyError:
-                oid = 'None'
-
-            msg = 'Received {} with oid {}. Unknown situation'
-            msg = msg.format(ttype, oid)
-            self.put_notification(msg, trans)
-            return
-
-        try:
-            oref = self._ordersrev[oid]
-            self._process_transaction(oid, trans)
-        except KeyError:  # not yet seen, keep as pending
-            self._transpend[oid].append(trans)
-
-    _X_ORDER_FILLED = ('MARKET_ORDER_CREATE',
-                       'ORDER_FILLED', 'TAKE_PROFIT_FILLED',
-                       'STOP_LOSS_FILLED', 'TRAILING_STOP_FILLED',)
-
-    def _process_transaction(self, oid, trans):
-        try:
-            oref = self._ordersrev.pop(oid)
-        except KeyError:
-            return
-
-        ttype = trans['type']
-
-        if ttype in self._X_ORDER_FILLED:
-            size = trans['units']
-            if trans['side'] == 'sell':
-                size = -size
-            price = trans['price']
-            self.broker._fill(oref, size, price, ttype=ttype)
-
-        elif ttype in self._X_ORDER_CREATE:
-            self.broker._accept(oref)
-            self._ordersrev[oid] = oref
-
-        elif ttype in 'ORDER_CANCEL':
-            reason = trans['reason']
-            if reason == 'ORDER_FILLED':
-                pass  # individual execs have done the job
-            elif reason == 'TIME_IN_FORCE_EXPIRED':
-                self.broker._expire(oref)
-            elif reason == 'CLIENT_REQUEST':
-                self.broker._cancel(oref)
-            else:  # default action ... if nothing else
-                self.broker._reject(oref)
