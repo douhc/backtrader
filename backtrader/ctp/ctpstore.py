@@ -88,21 +88,12 @@ class CtpStore(with_metaclass(MetaSingleton, object)):
 
         self._env = None  # reference to cerebro for general notifications
         self.broker: CtpBroker = None  # broker instance
-        self.datas = list()  # datas that have registered over start
+        # key: dataname, val: feed
+        self.datas = collections.OrderedDict()  # datas that have registered over start
 
         # self._orders = collections.OrderedDict()  # map order.ref to oid
         self._ordersrev = collections.OrderedDict()  # map oid to order.ref
-
         self._oenv = self._ENVPRACTICE if self.p.practice else self._ENVLIVE
-
-        # Setup Api
-        self.mdapi = CtpMdApi(self)
-        self.mdapi.connect(self.p.md_address, self.p.userid, self.p.password, self.p.brokerid)
-        self.tdapi = CtpTdApi(self)
-        self.tdapi.connect(self.p.td_address, self.p.userid, self.p.password, self.p.brokerid, self.p.auth_code, self.p.appid, self.p.product_info)
-
-        # 行情数据队列
-        self.qtick = queue.Queue()
         # 合约信息: inst -> ContractData
         self._contracts = collections.OrderedDict()
         # 仓位信息
@@ -110,7 +101,26 @@ class CtpStore(with_metaclass(MetaSingleton, object)):
 
         self._cash = 0.0
         self._value = 0.0
-        self._evt_acct = threading.Event()
+
+        # Setup Api
+        self.mdapi = CtpMdApi(self)
+        self.mdapi.connect(self.p.md_address, self.p.userid, self.p.password, self.p.brokerid)
+        self.tdapi = CtpTdApi(self)
+        self.tdapi.connect(self.p.td_address, self.p.userid, self.p.password, self.p.brokerid, self.p.auth_code, self.p.appid, self.p.product_info)
+
+        trynum = 5
+        while trynum > 0:
+            if self.tdapi.login_status and self.mdapi.login_status:
+                print("TD & MD server both login success!")
+                break
+            else:
+                print(f"MD login status: {self.mdapi.login_status}, TD login status: {self.tdapi.login_status}")
+                _time.sleep(0.5)
+                trynum -= 1
+        
+        # 查询账号信息
+        if self.tdapi.login_status:
+            self.tdapi.query_account()
 
     def start(self, data=None, broker=None):
         # Datas require some processing to kickstart data reception
@@ -121,7 +131,7 @@ class CtpStore(with_metaclass(MetaSingleton, object)):
         if data is not None:
             self._env = data._env
             # For datas simulate a queue with None to kickstart co
-            self.datas.append(data)
+            self.datas[data.p.dataname] = data
 
             if self.broker is not None:
                 self.broker.data_started(data)
@@ -142,7 +152,7 @@ class CtpStore(with_metaclass(MetaSingleton, object)):
 
     # Ctp supported granularities
     _GRANULARITIES = {
-        (bt.TimeFrame.Ticks, 1): 'T1',
+        (bt.TimeFrame.Ticks, 1): 'TICK',
         (bt.TimeFrame.Seconds, 1): 'S1',
         (bt.TimeFrame.Seconds, 5): 'S5',
         (bt.TimeFrame.Seconds, 10): 'S10',
@@ -168,21 +178,29 @@ class CtpStore(with_metaclass(MetaSingleton, object)):
     }
 
     def on_tick(self, tick: TickData):
-        self.qtick.put(tick)
+        print(f"[on_tick] dataname: {tick.symbol}")
+        data = self.datas.get(tick.symbol)
+        if data != None:
+            data.on_tick(tick)
 
     def on_account(self, account: AccountData):
         self._cash = account.available
         self._value = account.balance
+        print(f"[on_account] cash: {self._cash} value: {self._value}")
 
     def on_position(self, position: PositionData):
         key = f"{position.symbol, position.direction}"
         self._positions[key] = position
+        print(f"[on_position] {key}")
 
     def on_contract(self, contract: ContractData):
         self._contracts[contract.symbol] = contract
+        print(f"[on_contract] dataname: {contract.symbol}")
 
     def on_order(self, order: OrderData):
-        oref = self._ordersrev[order.vt_orderid]
+        print(f"[on_order] orderid: {order.vt_orderid} status: {order.status}")
+        ord: Order = self._ordersrev[order.vt_orderid]
+        oref = ord.ref
         if order.status == Status.REJECTED:
             self.broker._reject(oref)
         elif order.status == Status.SUBMITTING:
@@ -201,8 +219,16 @@ class CtpStore(with_metaclass(MetaSingleton, object)):
             print(f"order status {order.status}")
 
     def on_trade(self, trade: TradeData):
+        print(f"[on_trade] orderid:{trade.vt_orderid}, volume:{trade.volume}, price:{trade.price}")
         oref = self._ordersrev[trade.vt_orderid]        
         self.broker._fill(oref, trade.volume, trade.price)
+
+    def subscribe(self, dataname):
+        req = SubscribeRequest(
+            symbol=dataname,
+            exchange=Exchange.SHFE,
+        )
+        self.mdapi.subscribe(req)
 
     def get_positions(self):
         # 字段结构， key: ("ag2103", "多"), value: PositionData()

@@ -153,6 +153,7 @@ class CtpData(with_metaclass(MetaCtpData, DataBase)):
     def __init__(self, **kwargs):
         self.o = self._store(**kwargs)
         self._candleFormat = 'bidask' if self.p.bidask else 'midpoint'
+        self.qlive = queue.Queue()
 
     def setenvironment(self, env):
         '''Receives an environment (cerebro) and passes it over to the store it
@@ -168,7 +169,6 @@ class CtpData(with_metaclass(MetaCtpData, DataBase)):
         # Create attributes as soon as possible
         self._statelivereconn = False  # if reconnecting in live state
         self._storedmsg = dict()  # keep pending live message (under None)
-        self.qlive = queue.Queue()
         self._state = self._ST_OVER
 
         # Kickstart store and get queue to wait on
@@ -218,7 +218,7 @@ class CtpData(with_metaclass(MetaCtpData, DataBase)):
             self._state = self._ST_HISTORBACK
             return True
 
-        self.qlive = self.o.qtick
+        self.o.subscribe(self.p.dataname)
         if instart:
             self._statelivereconn = self.p.backfill_start
         else:
@@ -240,6 +240,9 @@ class CtpData(with_metaclass(MetaCtpData, DataBase)):
 
     def haslivedata(self):
         return bool(self._storedmsg or self.qlive)  # do not return the objs
+
+    def on_tick(self, tick: TickData):
+        self.qlive.put(tick)
 
     def _load(self):
         if self._state == self._ST_OVER:

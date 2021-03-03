@@ -82,7 +82,7 @@ class CtpBroker(with_metaclass(MetaCtpBroker, BrokerBase)):
 
         if self.p.use_positions:
             for (instrument, direction), p in self.o.get_positions().items():
-                print('position for instrument:', instrument)
+                print(f'position for instrument: {instrument}, {direction}')
                 is_sell = direction == Direction.SHORT
                 size = p.volume
                 if is_sell:
