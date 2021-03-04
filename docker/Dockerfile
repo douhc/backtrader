@@ -13,7 +13,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN set -ex && \
         apt-get -y update && \
         apt-get install -y ca-certificates apt-transport-https tzdata && \
-        apt-get install -y curl bzip2 tar wget grep sed dpkg telnet vim zip unzip rsync git && \
+        apt-get install -y curl bzip2 tar wget grep sed dpkg telnet vim zip unzip rsync git cmake && \
         apt-get install -y locales && localedef -i en_US -c -f UTF-8 -A /usr/share/locale/locale.alias en_US.UTF-8 && \
         apt-get install -y python3-distutils python3-dev pkg-config python3-pip libcrypto++ && \
         update-alternatives --install /usr/bin/python python /usr/bin/python3 1 && \

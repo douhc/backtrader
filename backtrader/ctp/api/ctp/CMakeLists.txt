@@ -7,33 +7,64 @@ project(vnctp VERSION 0.0.1 LANGUAGES CXX)
 
 set(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR})
 
+############# vnctpmd ##############
 add_library(
-  vnctp SHARED
+  vnctpmd SHARED
   vnctp/vnctpmd/vnctpmd.cpp 
-  vnctp/vnctptd/vnctptd.cpp 
   )
 
 target_include_directories(
-  vnctp
+  vnctpmd
   PRIVATE ${PROJECT_SOURCE_DIR}/include
   PRIVATE ${PROJECT_SOURCE_DIR}/vnctp
+  PRIVATE /usr/include/python3.6m
   )
 
 set_target_properties(
-  vnctp PROPERTIES
+  vnctpmd PROPERTIES
   COMPILE_DEFINITIONS ""
   COMPILE_FLAGS "-Wall"
   LINK_FLAGS ""
   )
 
 target_compile_features(
-  vnctp 
+  vnctpmd 
   PRIVATE cxx_std_11
   )
 
 target_link_libraries(
-  vnctp
+  vnctpmd
   PUBLIC -L${PROJECT_SOURCE_DIR}
-  PRIVATE thostmduserapi
-  PRIVATE thosttraderapi
+  PRIVATE thostmduserapi_se
+)
+
+############# vnctptd ##############
+add_library(
+  vnctptd SHARED
+  vnctp/vnctptd/vnctptd.cpp 
+  )
+
+target_include_directories(
+  vnctptd
+  PRIVATE ${PROJECT_SOURCE_DIR}/include
+  PRIVATE ${PROJECT_SOURCE_DIR}/vnctp
+  PRIVATE /usr/include/python3.6m
+  )
+
+set_target_properties(
+  vnctpmd PROPERTIES
+  COMPILE_DEFINITIONS ""
+  COMPILE_FLAGS "-Wall"
+  LINK_FLAGS ""
+  )
+
+target_compile_features(
+  vnctptd 
+  PRIVATE cxx_std_11
+  )
+
+target_link_libraries(
+  vnctptd
+  PUBLIC -L${PROJECT_SOURCE_DIR}
+  PRIVATE thosttraderapi_se
 )
