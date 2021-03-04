@@ -2,7 +2,7 @@ FROM ubuntu:18.04
 
 ## 修改APT源
 RUN cp -r /etc/apt/sources.list /etc/apt/sources.list.bk
-COPY sources.list /etc/apt/sources.list
+COPY docker/sources.list /etc/apt/sources.list
 
 ENV LANG=en_US.UTF-8 \
         LC_ALL=en_US.UTF-8 \
@@ -21,7 +21,7 @@ RUN set -ex && \
         apt-get clean && rm -rf /var/lib/apt/lists/*
 
 RUN mkdir /root/.pip
-COPY pip.conf /root/.pip/pip.conf
+COPY docker/pip.conf /root/.pip/pip.conf
 #####################################
 RUN mkdir -p /data /opt/backtrader
 
