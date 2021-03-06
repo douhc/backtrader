@@ -2,7 +2,6 @@
 # -*- coding: utf-8; py-indent-offset:4 -*-
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
-from backtrader.ctp.ctpbroker import CtpBroker
 
 import collections
 from datetime import datetime, timedelta
@@ -15,7 +14,6 @@ from backtrader.metabase import MetaParams
 from backtrader.utils.py3 import queue, with_metaclass
 from backtrader.utils import AutoDict
 from backtrader.order import Order
-
 from backtrader.ctp.ctp_gateway import CtpTdApi, CtpMdApi
 from .object import *
 from .constant import *
@@ -82,12 +80,13 @@ class CtpStore(with_metaclass(MetaSingleton, object)):
         return cls.BrokerCls(*args, **kwargs)
 
     def __init__(self):
+        from backtrader.ctp import ctpbroker
         super(CtpStore, self).__init__()
 
         self.notifs = collections.deque()  # store notifications for cerebro
 
         self._env = None  # reference to cerebro for general notifications
-        self.broker: CtpBroker = None  # broker instance
+        self.broker: ctpbroker.CtpBroker = None  # broker instance
         # key: dataname, val: feed
         self.datas = collections.OrderedDict()  # datas that have registered over start
 

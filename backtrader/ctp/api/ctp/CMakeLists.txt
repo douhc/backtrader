@@ -17,7 +17,7 @@ target_include_directories(
   vnctpmd
   PRIVATE ${PROJECT_SOURCE_DIR}/include
   PRIVATE ${PROJECT_SOURCE_DIR}/vnctp
-  PRIVATE /usr/include/python3.6m
+  PRIVATE /usr/include/python3.8
   )
 
 set_target_properties(
@@ -48,7 +48,7 @@ target_include_directories(
   vnctptd
   PRIVATE ${PROJECT_SOURCE_DIR}/include
   PRIVATE ${PROJECT_SOURCE_DIR}/vnctp
-  PRIVATE /usr/include/python3.6m
+  PRIVATE /usr/include/python3.8
   )
 
 set_target_properties(

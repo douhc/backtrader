@@ -3,9 +3,12 @@
 
 import sys
 import pytz
+import os
 from datetime import datetime
 from time import sleep
 
+from .constant import *
+from .object import *
 from backtrader.ctp.api.ctp import (
     MdApi,
     TdApi,
@@ -102,7 +105,6 @@ symbol_name_map = {}
 symbol_size_map = {}
 
 import logging
-from .ctpstore import CtpStore
 from .object import *
 from .constant import *
 
@@ -116,7 +118,7 @@ logging.basicConfig(level = logging.INFO, format = '%(asctime)s - %(name)s - %(l
 class CtpMdApi(MdApi):
     """"""
 
-    def __init__(self, gateway: CtpStore):
+    def __init__(self, gateway):
         """Constructor"""
         super(CtpMdApi, self).__init__()
         self.gateway_name = "CTP"
@@ -247,6 +249,8 @@ class CtpMdApi(MdApi):
         # If not connected, then start connection first.
         if not self.connect_status:
             path = CTP_MD_PATH
+            if not os.path.exists(path):
+                os.makedirs(path)
             self.createFtdcMdApi(str(path).encode("GBK"))
 
             self.registerFront(address)
@@ -293,7 +297,7 @@ class CtpMdApi(MdApi):
 class CtpTdApi(TdApi):
     """"""
 
-    def __init__(self, gateway: CtpStore):
+    def __init__(self, gateway):
         """Constructor"""
         super(CtpTdApi, self).__init__()
         self.gateway_name = "CTP"
@@ -630,7 +634,10 @@ class CtpTdApi(TdApi):
         self.product_info = product_info
 
         if not self.connect_status:
-            self.createFtdcTraderApi((CTP_TD_PATH).encode("GBK"))
+            path = CTP_TD_PATH
+            if not os.path.exists(path):
+                os.makedirs(path)
+            self.createFtdcTraderApi((path).encode("GBK"))
 
             self.subscribePrivateTopic(0)
             self.subscribePublicTopic(0)
