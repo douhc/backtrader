@@ -95,6 +95,7 @@ class CtpStore(with_metaclass(MetaSingleton, object)):
         self._oenv = self._ENVPRACTICE if self.p.practice else self._ENVLIVE
         # 合约信息: inst -> ContractData
         self._contracts = collections.OrderedDict()
+        self._finish_contract = False
         # 仓位信息
         self._positions = collections.OrderedDict()
 
@@ -192,9 +193,16 @@ class CtpStore(with_metaclass(MetaSingleton, object)):
         self._positions[key] = position
         print(f"[on_position] {key}")
 
-    def on_contract(self, contract: ContractData):
-        self._contracts[contract.symbol] = contract
-        print(f"[on_contract] dataname: {contract.symbol}")
+    def on_contract(self, contract: ContractData, last: bool):
+        if not last:
+            if self._finish_contract:
+                self._contracts = dict()
+                self._finish_contract = False
+            self._contracts[contract.symbol] = contract
+            print(f"[on_contract] dataname: {contract.symbol}")
+        else:
+            self._finish_contract = True
+            print("-------- Finish contract query. total contract: {}".format(len(self._contracts)))
 
     def on_order(self, order: OrderData):
         print(f"[on_order] orderid: {order.vt_orderid} status: {order.status}")

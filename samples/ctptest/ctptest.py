@@ -188,7 +188,6 @@ def runstrategy():
         auth_code=args.auth_code,
         product_info=args.product_info,
         practice=not args.live,
-        qcheck=args.qcheck,
     )
 
     if not args.no_store:
@@ -224,8 +223,21 @@ def runstrategy():
         fromdate = datetime.datetime.strptime(args.fromdate, dtformat)
 
     DataFactory = DataCls if args.no_store else store.getdata
+    datakwargs = dict(
+        timeframe=datatf, compression=datacomp,
+        qcheck=args.qcheck,
+        historical=args.historical,
+        reconnections=5,
+        fromdate=fromdate,
+        bidask=args.bidask,
+        useask=args.useask,
+        backfill_start=not args.no_backfill_start,
+        backfill=not args.no_backfill,
+        tz=args.timezone
+    )
 
-    data0 = DataFactory(dataname=args.data0, **storekwargs)
+
+    data0 = DataFactory(dataname=args.data0, **datakwargs)
 
     data1 = None
     if args.data1 is not None:
@@ -299,29 +311,29 @@ def parse_args(pargs=None):
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
         description='Test Ctp integration')
 
-    parser.add_argument('--userid', default='15811092899',
-                        required=True, action='store',
+    parser.add_argument('--userid', default='048318',
+                        required=False, action='store',
                         help='Account identifier to use')
-    parser.add_argument('--password', default='guiny2899',
-                        required=True, action='store',
+    parser.add_argument('--password', default='pbalpha8888',
+                        required=False, action='store',
                         help='password')
-    parser.add_argument('--brokerid', default='041545',
-                        required=True, action='store',
+    parser.add_argument('--brokerid', default='9999',
+                        required=False, action='store',
                         help='brokerid')
-    parser.add_argument('--td-address', default='',
-                        required=True, action='store',
-                        help='td address')
-    parser.add_argument('--md-address', default='',
-                        required=True, action='store',
-                        help='md address')
-    parser.add_argument('--appid', default='',
-                        required=True, action='store',
+    parser.add_argument('--td-address', default='tcp://180.168.146.187:10100',
+                        required=False, action='store',
+                        help='http://www.simnow.com.cn/product.action')
+    parser.add_argument('--md-address', default='tcp://180.168.146.187:10110',
+                        required=False, action='store',
+                        help='http://www.simnow.com.cn/product.action')
+    parser.add_argument('--appid', default='simnow_client_test',
+                        required=False, action='store',
                         help='appid')
-    parser.add_argument('--auth-code', default='',
-                        required=True, action='store',
+    parser.add_argument('--auth-code', default='0000000000000000',
+                        required=False, action='store',
                         help='auth code')
     parser.add_argument('--product-info', default='',
-                        required=True, action='store',
+                        required=False, action='store',
                         help='product info')
 
     parser.add_argument('--exactbars', default=1, type=int,
@@ -344,7 +356,7 @@ def parse_args(pargs=None):
                         required=False, action='store',
                         help='Go to live server rather than practice')
 
-    parser.add_argument('--qcheck', default=0.5, type=float,
+    parser.add_argument('--qcheck', default=3.0, type=float,
                         required=False, action='store',
                         help=('Timeout for periodic '
                               'notification/resampling/replaying check'))

@@ -181,6 +181,7 @@ class CtpMdApi(MdApi):
         """
         Callback of tick data update.
         """
+        self.logger.info("-----------  onRtnDepthMarketData -------------")
         # Filter data update with no timestamp
         if not data["UpdateTime"]:
             return
@@ -252,7 +253,6 @@ class CtpMdApi(MdApi):
             if not os.path.exists(path):
                 os.makedirs(path)
             self.createFtdcMdApi(str(path).encode("GBK"))
-
             self.registerFront(address)
             self.init()
 
@@ -279,6 +279,7 @@ class CtpMdApi(MdApi):
         Subscribe to tick data update.
         """
         if self.login_status:
+            self.logger.info("Prepare subscribe instrument: {}".format(req.symbol))
             self.subscribeMarketData(req.symbol)
         self.subscribed.add(req.symbol)
 
@@ -350,7 +351,7 @@ class CtpTdApi(TdApi):
             self.logger.info("交易服务器授权验证成功")
             self.login()
         else:
-            self.logger.error("交易服务器授权验证失败", error)
+            self.logger.error("交易服务器授权验证失败, error: {}".format(error))
 
     def onRspUserLogin(self, data: dict, error: dict, reqid: int, last: bool):
         """"""
@@ -366,11 +367,12 @@ class CtpTdApi(TdApi):
                 "InvestorID": self.userid
             }
             self.reqid += 1
+            self.logger.info("确认结算清单.....")
             self.reqSettlementInfoConfirm(req, self.reqid)
         else:
             self.login_failed = True
 
-            self.logger.error("交易服务器登录失败", error)
+            self.logger.error("交易服务器登录失败, error: {}".format(error))
 
     def onRspOrderInsert(self, data: dict, error: dict, reqid: int, last: bool):
         """"""
@@ -517,13 +519,14 @@ class CtpTdApi(TdApi):
                 contract.option_index = str(data["StrikePrice"])
                 contract.option_expiry = datetime.strptime(data["ExpireDate"], "%Y%m%d")
 
-            self.gateway.on_contract(contract)
+            self.gateway.on_contract(contract, False)
 
             symbol_exchange_map[contract.symbol] = contract.exchange
             symbol_name_map[contract.symbol] = contract.name
             symbol_size_map[contract.symbol] = contract.size
 
         if last:
+            self.gateway.on_contract(None, True)
             self.contract_inited = True
             self.logger.info("合约信息查询成功")
 
@@ -641,7 +644,6 @@ class CtpTdApi(TdApi):
 
             self.subscribePrivateTopic(0)
             self.subscribePublicTopic(0)
-
             self.registerFront(address)
             self.init()
 
@@ -659,7 +661,6 @@ class CtpTdApi(TdApi):
             "AuthCode": self.auth_code,
             "AppID": self.appid
         }
-
         if self.product_info:
             req["UserProductInfo"] = self.product_info
 

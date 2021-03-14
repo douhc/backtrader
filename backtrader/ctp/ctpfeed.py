@@ -2,7 +2,7 @@
 # -*- coding: utf-8; py-indent-offset:4 -*-
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
-
+import time
 from datetime import datetime, timedelta
 
 from backtrader.feed import DataBase
@@ -180,53 +180,27 @@ class CtpData(with_metaclass(MetaCtpData, DataBase)):
             self.put_notification(self.NOTSUPPORTED_TF)
             self._state = self._ST_OVER
             return
+        try_count = 5
+        while try_count > 0:
+            self.contractdetails = cd = self.o.get_instrument(self.p.dataname)
+            if cd:
+                break
+            try_count -= 1
+            print('Can not get instrument detail. try again...')
+            time.sleep(1)
 
-        self.contractdetails = cd = self.o.get_instrument(self.p.dataname)
-        if cd is None:
-            self.put_notification(self.NOTSUBSCRIBED)
-            self._state = self._ST_OVER
-            return
-
-        if self.p.backfill_from is not None:
-            self._state = self._ST_FROM
-            self.p.backfill_from._start()
+        if self.contractdetails is None:
+            print(f"*******Can not get instrument {self.p.dataname} detail info")
         else:
-            self._start_finish()
-            self._state = self._ST_START  # initial state for _load
-            self._st_start()
+            print(f"----- Get instrument: {self.p.dataname} detail info: {self.contractdetails} ----------")
+        self._start_finish()
+        self._state = self._ST_START  # initial state for _load
+        self._st_start()
 
         self._reconns = 0
 
     def _st_start(self, instart=True, tmout=None):
-        if self.p.historical:
-            self.put_notification(self.DELAYED)
-            dtend = None
-            if self.todate < float('inf'):
-                dtend = num2date(self.todate)
-
-            dtbegin = None
-            if self.fromdate > float('-inf'):
-                dtbegin = num2date(self.fromdate)
-
-            # TODO
-            self.qhist = self.o.candles(
-                self.p.dataname, dtbegin, dtend,
-                self._timeframe, self._compression,
-                candleFormat=self._candleFormat,
-                includeFirst=self.p.includeFirst)
-
-            self._state = self._ST_HISTORBACK
-            return True
-
         self.o.subscribe(self.p.dataname)
-        if instart:
-            self._statelivereconn = self.p.backfill_start
-        else:
-            self._statelivereconn = self.p.backfill
-
-        if self._statelivereconn:
-            self.put_notification(self.DELAYED)
-
         self._state = self._ST_LIVE
         if instart:
             self._reconns = self.p.reconnections
@@ -250,13 +224,12 @@ class CtpData(with_metaclass(MetaCtpData, DataBase)):
 
         while True:
             if self._state == self._ST_LIVE:
+                last_msg: TickData = self._storedmsg.get(None)
+                if last_msg != None:
+                    print(f'[ctpfeed] last msg: {last_msg.datetime}, instrument: {last_msg.symbol} status: {self._state}')
                 try:
-                    msg = (self._storedmsg.pop(None, None) or
-                           self.qlive.get(timeout=self._qcheck))
+                    msg = self.qlive.get(timeout=self._qcheck)
                 except queue.Empty:
-                    return None  # indicate timeout situation
-
-                if msg is None:  # Conn broken during historical/backfilling
                     self.put_notification(self.CONNBROKEN)
                     # Try to reconnect
                     if not self.p.reconnect or self._reconns == 0:
@@ -270,98 +243,8 @@ class CtpData(with_metaclass(MetaCtpData, DataBase)):
                     continue
 
                 self._reconns = self.p.reconnections
-
-                # Process the message according to expected return type
-                if not self._statelivereconn:
-                    if self._laststatus != self.LIVE:
-                        if self.qlive.qsize() <= 1:  # very short live queue
-                            self.put_notification(self.LIVE)
-
-                    ret = self._load_tick(msg)
-                    if ret:
-                        return True
-
-                    # could not load bar ... go and get new one
-                    continue
-
-                # Fall through to processing reconnect - try to backfill
                 self._storedmsg[None] = msg  # keep the msg
-
-                # else do a backfill
-                if self._laststatus != self.DELAYED:
-                    self.put_notification(self.DELAYED)
-
-                dtend = None
-                if len(self) > 1:
-                    # len == 1 ... forwarded for the 1st time
-                    dtbegin = self.datetime.datetime(-1)
-                elif self.fromdate > float('-inf'):
-                    dtbegin = num2date(self.fromdate)
-                else:  # 1st bar and no begin set
-                    # passing None to fetch max possible in 1 request
-                    dtbegin = None
-
-                dtend = datetime.utcfromtimestamp(int(msg['time']) / 10 ** 6)
-
-                self.qhist = self.o.candles(
-                    self.p.dataname, dtbegin, dtend,
-                    self._timeframe, self._compression,
-                    candleFormat=self._candleFormat,
-                    includeFirst=self.p.includeFirst)
-
-                self._state = self._ST_HISTORBACK
-                self._statelivereconn = False  # no longer in live
-                continue
-
-            elif self._state == self._ST_HISTORBACK:
-                msg = self.qhist.get()
-                if msg is None:  # Conn broken during historical/backfilling
-                    # Situation not managed. Simply bail out
-                    self.put_notification(self.DISCONNECTED)
-                    self._state = self._ST_OVER
-                    return False  # error management cancelled the queue
-
-                elif 'code' in msg:  # Error
-                    self.put_notification(self.NOTSUBSCRIBED)
-                    self.put_notification(self.DISCONNECTED)
-                    self._state = self._ST_OVER
-                    return False
-
-                if msg:
-                    if self._load_history(msg):
-                        return True  # loading worked
-
-                    continue  # not loaded ... date may have been seen
-                else:
-                    # End of histdata
-                    if self.p.historical:  # only historical
-                        self.put_notification(self.DISCONNECTED)
-                        self._state = self._ST_OVER
-                        return False  # end of historical
-
-                # Live is also wished - go for it
-                self._state = self._ST_LIVE
-                continue
-
-            elif self._state == self._ST_FROM:
-                if not self.p.backfill_from.next():
-                    # additional data source is consumed
-                    self._state = self._ST_START
-                    continue
-
-                # copy lines of the same name
-                for alias in self.lines.getlinealiases():
-                    lsrc = getattr(self.p.backfill_from.lines, alias)
-                    ldst = getattr(self.lines, alias)
-
-                    ldst[0] = lsrc[0]
-
-                return True
-
-            elif self._state == self._ST_START:
-                if not self._st_start(instart=False):
-                    self._state = self._ST_OVER
-                    return False
+                self._load_tick(msg)
 
     def _load_tick(self, tick: TickData):
         dt = date2num(tick.datetime)

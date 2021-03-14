@@ -15,8 +15,10 @@ RUN set -ex && \
         apt-get install -y ca-certificates apt-transport-https tzdata && \
         apt-get install -y build-essential && \
         apt-get install -y curl bzip2 tar wget grep sed dpkg telnet vim zip unzip rsync git cmake && \
-        apt-get install -y locales && localedef -i en_US -c -f UTF-8 -A /usr/share/locale/locale.alias en_US.UTF-8 && \
+        apt-get install -y language-pack-zh-hans language-pack-zh-hans-base && \
+        apt-get install -y locales && localedef -i zh_CN -c -f GB18030 -A /usr/share/locale/locale.alias zh_CN.GB18030 && \
         apt-get install -y python3-distutils python3-dev pkg-config python3-pip libcrypto++ && \
+        locale-gen zh_CN.GB18030 && \
         update-alternatives --install /usr/bin/python python /usr/bin/python3 1 && \
         update-alternatives --install /usr/bin/pip pip /usr/bin/pip3 1 && \
         apt-get clean && rm -rf /var/lib/apt/lists/*
