@@ -121,7 +121,7 @@ class CtpData(with_metaclass(MetaCtpData, DataBase)):
     Any other combination will be rejected
     '''
     params = (
-        ('qcheck', 0.5),
+        ('qcheck', 3.0),
         ('historical', False),  # do backfilling at the start
         ('backfill_start', True),  # do backfilling at the start
         ('backfill', True),  # do backfilling when reconnecting

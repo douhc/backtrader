@@ -1,3 +1,8 @@
+# -*- coding: utf-8 -*-
+# @Author: Your name
+# @Date:   2021-02-23 23:31:20
+# @Last Modified by:   Your name
+# @Last Modified time: 2021-03-16 00:13:00
 #!/usr/bin/env python
 # -*- coding: utf-8; py-indent-offset:4 -*-
 from __future__ import (absolute_import, division, print_function,
@@ -217,11 +222,11 @@ class CtpStore(with_metaclass(MetaSingleton, object)):
         elif order.status == Status.PARTTRADED:
             # TODO
             # self.broker._fill(oref, order.traded, order.price)
-            pass
+            print('[on_order]  order part traded.')
         elif order.status == Status.ALLTRADED:
             # TODO
             # self.broker._fill(oref, order.traded, order.price)
-            pass
+            print('[on_order]  order all traded.')
         else:
             print(f"order status {order.status}")
 

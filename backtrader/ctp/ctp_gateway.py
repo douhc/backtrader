@@ -1,3 +1,8 @@
+# -*- coding: utf-8 -*-
+# @Author: Your name
+# @Date:   2021-02-26 22:36:51
+# @Last Modified by:   Your name
+# @Last Modified time: 2021-03-15 23:39:49
 """
 """
 
@@ -6,7 +11,9 @@ import pytz
 import os
 from datetime import datetime
 from time import sleep
-
+import logging
+from .object import *
+f
 from .constant import *
 from .object import *
 from backtrader.ctp.api.ctp import (
@@ -104,16 +111,11 @@ symbol_exchange_map = {}
 symbol_name_map = {}
 symbol_size_map = {}
 
-import logging
-from .object import *
-from .constant import *
-
 CTP_MD_PATH = "/tmp/ctp/md"
 CTP_TD_PATH = "/tmp/ctp/td"
 
 
 logging.basicConfig(level = logging.INFO, format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-
 
 class CtpMdApi(MdApi):
     """"""

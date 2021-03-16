@@ -32,4 +32,5 @@ ADD requirements.txt /root/
 RUN pip3 install -r /root/requirements.txt && \
     rm -rf /root/.cache/pip
 
+COPY backtrader/ctp/api/ctp/libthost*.so /usr/lib/
 ENTRYPOINT [ "bash" ]
