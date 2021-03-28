@@ -2,11 +2,12 @@
 # @Author: Your name
 # @Date:   2021-02-23 23:31:20
 # @Last Modified by:   Your name
-# @Last Modified time: 2021-03-28 18:32:23
+# @Last Modified time: 2021-03-28 22:04:13
 #!/usr/bin/env python
 # -*- coding: utf-8; py-indent-offset:4 -*-
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
+from backtrader.position import Position
 
 import collections
 from datetime import datetime, timedelta
@@ -100,7 +101,9 @@ class CtpStore(with_metaclass(MetaSingleton, object)):
         self._contracts = collections.OrderedDict()
         self._finish_contract = False
         # 仓位信息
-        self._positions = collections.OrderedDict()
+        self._positions = collections.OrderedDict(Position)
+        # 仓位初始化
+        self._pos_inited = False
 
         self._cash = 0.0
         self._value = 0.0
@@ -124,6 +127,26 @@ class CtpStore(with_metaclass(MetaSingleton, object)):
         # 查询账号信息
         if self.tdapi.login_status:
             self.tdapi.query_account()
+            self.tdapi.query_position()
+
+        trynum = 5
+        while trynum > 0:
+            if self.cash != None and self.value != None:
+                print("Get account info sucess!")
+                break
+            else:
+                print(f"Have not get account info. try again.")
+                _time.sleep(0.5)
+                trynum -= 1
+        trynum = 5
+        while trynum > 0:
+            if self._pos_inited:
+                print("Position is inited!")
+                break
+            else:
+                print(f"Position is not inited. try again.")
+                _time.sleep(0.5)
+                trynum -= 1
 
     def start(self, data=None, broker=None):
         # Datas require some processing to kickstart data reception
@@ -191,10 +214,17 @@ class CtpStore(with_metaclass(MetaSingleton, object)):
         self._value = account.balance
         print(f"[on_account] cash: {self._cash} value: {self._value}")
 
-    def on_position(self, position: PositionData):
-        key = f"{position.symbol, position.direction}"
-        self._positions[key] = position
-        print(f"[on_position] {key}")
+    def on_position(self, position: PositionData, last=False):
+        is_sell = position.direction == Direction.SHORT
+        size = position.volume
+        if is_sell:
+            size = -size
+        price = position.price
+        self._positions[position.symbol] = Position(size, price)
+        if last:
+            self._pos_inited = True
+            for k, v in self._positions.items():
+                print(f"intrument: {k}, size: {v.size}, price: {v.price}")
 
     def on_contract(self, contract: ContractData, last: bool):
         if not last:
@@ -241,7 +271,6 @@ class CtpStore(with_metaclass(MetaSingleton, object)):
         self.mdapi.subscribe(req)
 
     def get_positions(self):
-        # 字段结构， key: ("ag2103", "多"), value: PositionData()
         return self._positions
 
     def get_granularity(self, timeframe, compression):

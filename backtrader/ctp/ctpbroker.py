@@ -1,7 +1,7 @@
 # @Author: Your name
 # @Date:   2021-02-23 23:31:20
 # @Last Modified by:   Your name
-# @Last Modified time: 2021-03-28 18:26:40
+# @Last Modified time: 2021-03-28 21:53:01
 #!/usr/bin/env python
 # -*- coding: utf-8; py-indent-offset:4 -*-
 from __future__ import (absolute_import, division, print_function,
@@ -85,14 +85,8 @@ class CtpBroker(with_metaclass(MetaCtpBroker, BrokerBase)):
         self.startingvalue = self.value = self.o.get_value()
 
         if self.p.use_positions:
-            for (instrument, direction), p in self.o.get_positions().items():
-                print(f'position for instrument: {instrument}, {direction}')
-                is_sell = direction == Direction.SHORT
-                size = p.volume
-                if is_sell:
-                    size = -size
-                price = p.price
-                self.positions[instrument] = Position(size, price)
+            for instrument, p in self.o.get_positions().items():
+                self.positions[instrument] = Position(p.size, p.price)
 
     def data_started(self, data):
         pos = self.getposition(data)
