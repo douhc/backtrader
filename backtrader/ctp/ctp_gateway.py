@@ -13,7 +13,7 @@ from datetime import datetime
 from time import sleep
 import logging
 from .object import *
-f
+
 from .constant import *
 from .object import *
 from backtrader.ctp.api.ctp import (

@@ -1,0 +1,1 @@
+python ctptest.py --data0 ag2105  --userid 13524929694 --password paqh1234 --brokerid 5200 --td-address tcp://202.69.19.72:31205 --md-address tcp://202.69.19.72:31213 --appid client_pbalpha_v1.0  --auth-code KCPHUVETYIUMJB9G

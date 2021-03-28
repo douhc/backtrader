@@ -1,3 +1,7 @@
+# @Author: Your name
+# @Date:   2021-02-23 23:31:20
+# @Last Modified by:   Your name
+# @Last Modified time: 2021-03-28 18:26:40
 #!/usr/bin/env python
 # -*- coding: utf-8; py-indent-offset:4 -*-
 from __future__ import (absolute_import, division, print_function,
@@ -338,3 +342,10 @@ class CtpBroker(with_metaclass(MetaCtpBroker, BrokerBase)):
 
     def next(self):
         self.notifs.append(None)  # mark notification boundary
+    
+    def get_ref_from_orderid(self, orderid):
+        d = dict(filter(lambda e: e[1].info['orderid'] == orderid, self.orders.items()))
+        if len(d) > 0:
+            return list(d.keys())[0]
+        else:
+            return None

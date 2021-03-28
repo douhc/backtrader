@@ -2,7 +2,7 @@
 # @Author: Your name
 # @Date:   2021-02-23 23:31:20
 # @Last Modified by:   Your name
-# @Last Modified time: 2021-03-16 00:13:00
+# @Last Modified time: 2021-03-28 18:32:23
 #!/usr/bin/env python
 # -*- coding: utf-8; py-indent-offset:4 -*-
 from __future__ import (absolute_import, division, print_function,
@@ -95,8 +95,6 @@ class CtpStore(with_metaclass(MetaSingleton, object)):
         # key: dataname, val: feed
         self.datas = collections.OrderedDict()  # datas that have registered over start
 
-        # self._orders = collections.OrderedDict()  # map order.ref to oid
-        self._ordersrev = collections.OrderedDict()  # map oid to order.ref
         self._oenv = self._ENVPRACTICE if self.p.practice else self._ENVLIVE
         # 合约信息: inst -> ContractData
         self._contracts = collections.OrderedDict()
@@ -204,15 +202,13 @@ class CtpStore(with_metaclass(MetaSingleton, object)):
                 self._contracts = dict()
                 self._finish_contract = False
             self._contracts[contract.symbol] = contract
-            print(f"[on_contract] dataname: {contract.symbol}")
         else:
             self._finish_contract = True
             print("-------- Finish contract query. total contract: {}".format(len(self._contracts)))
 
     def on_order(self, order: OrderData):
         print(f"[on_order] orderid: {order.vt_orderid} status: {order.status}")
-        ord: Order = self._ordersrev[order.vt_orderid]
-        oref = ord.ref
+        oref = self.broker.get_ref_from_orderid(order.vt_orderid)
         if order.status == Status.REJECTED:
             self.broker._reject(oref)
         elif order.status == Status.SUBMITTING:
@@ -222,17 +218,19 @@ class CtpStore(with_metaclass(MetaSingleton, object)):
         elif order.status == Status.PARTTRADED:
             # TODO
             # self.broker._fill(oref, order.traded, order.price)
-            print('[on_order]  order part traded.')
+            print('[on_order]  order part traded. price:{}, voluem:{}, traded:{}'.format(order.price, order.volume, order.traded))
         elif order.status == Status.ALLTRADED:
             # TODO
             # self.broker._fill(oref, order.traded, order.price)
-            print('[on_order]  order all traded.')
+            print('[on_order]  order all traded. price:{}, voluem:{}, traded:{}'.format(order.price, order.volume, order.traded))
+        elif order.status == Status.NOTTRADED:
+            print('[on_order]  order not traded.')
         else:
             print(f"order status {order.status}")
 
     def on_trade(self, trade: TradeData):
         print(f"[on_trade] orderid:{trade.vt_orderid}, volume:{trade.volume}, price:{trade.price}")
-        oref = self._ordersrev[trade.vt_orderid]        
+        oref = self.broker.get_ref_from_orderid(trade.vt_orderid)
         self.broker._fill(oref, trade.volume, trade.price)
 
     def subscribe(self, dataname):
@@ -281,7 +279,6 @@ class CtpStore(with_metaclass(MetaSingleton, object)):
         )
         oid = self.tdapi.send_order(req)
         order.addinfo(orderid=oid)
-        self._ordersrev[oid] = order
         return order
 
     def order_cancel(self, order: Order):
