@@ -101,7 +101,7 @@ class CtpStore(with_metaclass(MetaSingleton, object)):
         self._contracts = collections.OrderedDict()
         self._finish_contract = False
         # 仓位信息
-        self._positions = collections.OrderedDict(Position)
+        self._positions = collections.OrderedDict()
         # 仓位初始化
         self._pos_inited = False
 
@@ -131,8 +131,8 @@ class CtpStore(with_metaclass(MetaSingleton, object)):
 
         trynum = 5
         while trynum > 0:
-            if self.cash != None and self.value != None:
-                print("Get account info sucess!")
+            if self._cash != None and self._value != None:
+                print("Get account info success!")
                 break
             else:
                 print(f"Have not get account info. try again.")
