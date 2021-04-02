@@ -2,7 +2,7 @@
 # @Author: Your name
 # @Date:   2021-02-23 23:31:20
 # @Last Modified by:   Your name
-# @Last Modified time: 2021-03-28 22:04:13
+# @Last Modified time: 2021-04-01 14:17:03
 #!/usr/bin/env python
 # -*- coding: utf-8; py-indent-offset:4 -*-
 from __future__ import (absolute_import, division, print_function,
@@ -105,13 +105,30 @@ class CtpStore(with_metaclass(MetaSingleton, object)):
         # 仓位初始化
         self._pos_inited = False
 
-        self._cash = 0.0
-        self._value = 0.0
+        self._cash = None
+        self._value = None
 
         # Setup Api
         self.mdapi = CtpMdApi(self)
-        self.mdapi.connect(self.p.md_address, self.p.userid, self.p.password, self.p.brokerid)
         self.tdapi = CtpTdApi(self)
+
+    def start(self, data=None, broker=None):
+        # Datas require some processing to kickstart data reception
+        if data is None and broker is None:
+            self.cash = None
+            return
+
+        if data is not None:
+            self._env = data._env
+            # For datas simulate a queue with None to kickstart co
+            self.datas[data.p.dataname] = data
+
+            if self.broker is not None:
+                self.broker.data_started(data)
+        elif broker is not None:
+            self.broker = broker
+        # Setup Api
+        self.mdapi.connect(self.p.md_address, self.p.userid, self.p.password, self.p.brokerid)
         self.tdapi.connect(self.p.td_address, self.p.userid, self.p.password, self.p.brokerid, self.p.auth_code, self.p.appid, self.p.product_info)
 
         trynum = 5
@@ -147,23 +164,6 @@ class CtpStore(with_metaclass(MetaSingleton, object)):
                 print(f"Position is not inited. try again.")
                 _time.sleep(0.5)
                 trynum -= 1
-
-    def start(self, data=None, broker=None):
-        # Datas require some processing to kickstart data reception
-        if data is None and broker is None:
-            self.cash = None
-            return
-
-        if data is not None:
-            self._env = data._env
-            # For datas simulate a queue with None to kickstart co
-            self.datas[data.p.dataname] = data
-
-            if self.broker is not None:
-                self.broker.data_started(data)
-
-        elif broker is not None:
-            self.broker = broker
 
     def stop(self):
         pass
@@ -260,6 +260,7 @@ class CtpStore(with_metaclass(MetaSingleton, object)):
 
     def on_trade(self, trade: TradeData):
         print(f"[on_trade] orderid:{trade.vt_orderid}, volume:{trade.volume}, price:{trade.price}")
+ 
         oref = self.broker.get_ref_from_orderid(trade.vt_orderid)
         self.broker._fill(oref, trade.volume, trade.price)
 
